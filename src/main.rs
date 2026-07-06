@@ -11,11 +11,17 @@ const DOWNLOAD_FILE: &str = "config.json";
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<()> {
+    dotenvy::dotenv().ok();
+    let hf_token = std::env::var("HF_TOKEN").expect("未设置TOKEN");
     // ---- 1. Client ---------------------------------------------------------
     // `HFClient::new()` reads HF_TOKEN / HF_ENDPOINT / HF_HOME / HF_HUB_CACHE
     // from the environment and configures the underlying reqwest client +
     // on-disk cache. `HFClient` is internally an Arc, so clones are cheap.
-    let client = hf_hub::HFClient::new().context("building HF client from env")?;
+    let client = hf_hub::HFClient::builder()
+        .token(hf_token)
+        .build()
+        .context("building HF client with explicit token")?;
+
     println!("== client ==");
     println!("  endpoint : {}", client.endpoint());
     println!("  cache    : {}", client.cache_dir().display());

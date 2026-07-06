@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.103"
+dotenvy = "0.15.7"
 futures = "0.3"
 hf-hub = "1.0.0-rc.1"
 ratatui = "0.30.2"
