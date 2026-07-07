@@ -12,6 +12,24 @@ struct Model {
     model_name: String,
     model_owner: String,
 }
+
+struct TensorsRecord {
+    name: String,
+    dtype: String,
+    shape: Vec<usize>,
+    numel: usize,
+    size_bytes: usize,
+    module_path: Vec<String>,
+    kind: TensorKind,
+}
+enum TensorKind {
+    weight,
+    Bias,
+    LayerNorm,
+    Attention,
+    Embedding,
+    Other,
+}
 async fn client_get() -> Result<HFClient> {
     dotenvy::dotenv().ok();
     let hf_token = std::env::var("HF_TOKEN").context("HF_TOKEN没设置")?;
@@ -76,6 +94,23 @@ fn inspect_safetensors(path: impl AsRef<Path>) -> Result<()> {
     }
     Ok(())
 }
+// fn load_safetensors(path: impl AsRef<Path>) -> Result<TensorsRecord> {
+//     let path = path.as_ref();
+//     let data = fs::read(path).with_context(|| format!("模型文件{}打开错误", path.display()))?;
+//     let tensors = SafeTensors::deserialize(&data)
+//         .with_context(|| format!("解析safentensors文件失败:{}", path.display()))?;
+
+//     let mut records = Vec::new();
+//     for name in tensors.names() {
+//         let tensor = tensors
+//             .tensor(name)
+//             .with_context(|| format!("读取metadata失败:{}", name))?;
+//         let shape = tensor.shape().to_vec();
+//         let dtype = format!("{:?}", tensor.dtype());
+//         let numel = shape.iter().product::<usize>();
+//     }
+//     todo!()
+// }
 
 #[cfg(test)]
 mod tests {

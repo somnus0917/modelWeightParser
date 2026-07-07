@@ -1792,6 +1792,7 @@ name = "model_weight_parser"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "crossterm",
  "dotenvy",
  "futures",
  "hf-hub",
