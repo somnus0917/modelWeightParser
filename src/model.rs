@@ -1,11 +1,16 @@
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{Context, Ok, Result};
 use dotenvy;
 use hf_hub::HFClient;
+use safetensors::SafeTensors;
+#[derive(Clone)]
 struct Model {
-    modelname: String,
-    modelowner: String,
+    model_name: String,
+    model_owner: String,
 }
 async fn client_get() -> Result<HFClient> {
     dotenvy::dotenv().ok();
@@ -37,16 +42,38 @@ async fn check_status(client: &HFClient) -> Result<()> {
     Ok(())
 }
 
-async fn download_safetensor(client: HFClient, model: Model) -> Result<()> {
-    let model = client.model(model.modelowner, model.modelname);
+async fn download_safetensor(client: HFClient, m1: Model) -> Result<()> {
+    let model = client.model(&m1.model_owner, &m1.model_name);
+    let download_dir = PathBuf::from("hf-downloads/").join(m1.model_name);
     let path = model
         .download_file()
         .filename("model.safetensors")
-        .local_dir(PathBuf::from("./hf-downloads"))
+        .local_dir(download_dir)
         .send()
         .await
         .context("下载模型失败")?;
     println!("模型下载到{:?}", path);
+    Ok(())
+}
+
+fn inspect_safetensors(path: impl AsRef<Path>) -> Result<()> {
+    let path = path.as_ref();
+    let data =
+        fs::read(path).with_context(|| format!("读取safetensors文件失败:{}", path.display()))?;
+    let tensors = SafeTensors::deserialize(&data)
+        .with_context(|| format!("解析safentensors文件失败:{}", path.display()))?;
+    println!("== tensor in {} ==", path.display());
+    for name in tensors.names() {
+        let tensor = tensors
+            .tensor(name)
+            .with_context(|| format!("读取 tensor metadata 失败:{name}"))?;
+        println!(
+            "{:<90} dtype={:?},shape={:?}",
+            name,
+            tensor.dtype(),
+            tensor.shape()
+        );
+    }
     Ok(())
 }
 
@@ -63,11 +90,17 @@ mod tests {
     #[tokio::test]
     async fn test_download_safetensors() -> Result<()> {
         let m = Model {
-            modelname: String::from("albert-base-v2"),
-            modelowner: String::from("albert"),
+            model_name: String::from("albert-base-v2"),
+            model_owner: String::from("albert"),
         };
         let client = client_get().await?;
         download_safetensor(client, m).await?;
         Ok(())
     }
+    // #[test]
+    // fn test_inspect() -> Result<()> {
+    //     let path = "hf-downloads/model.safetensors";
+    //     inspect_safetensors(path);
+    //     Ok(())
+    // }
 }
