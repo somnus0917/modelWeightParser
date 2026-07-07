@@ -8,29 +8,29 @@ use dotenvy;
 use hf_hub::HFClient;
 use safetensors::SafeTensors;
 #[derive(Clone)]
-struct Model {
+pub struct Model {
     model_name: String,
     model_owner: String,
 }
 
-struct TensorsRecord {
-    name: String,
-    dtype: String,
-    shape: Vec<usize>,
-    numel: usize,
-    size_bytes: usize,
-    module_path: Vec<String>,
-    kind: TensorKind,
+pub struct TensorsRecord {
+    pub name: String,
+    pub dtype: String,
+    pub shape: Vec<usize>,
+    pub numel: usize,
+    pub size_bytes: usize,
+    pub module_path: Vec<String>,
+    pub kind: TensorKind,
 }
-enum TensorKind {
-    weight,
+pub enum TensorKind {
+    Weight,
     Bias,
     LayerNorm,
     Attention,
     Embedding,
     Other,
 }
-async fn client_get() -> Result<HFClient> {
+pub async fn client_get() -> Result<HFClient> {
     dotenvy::dotenv().ok();
     let hf_token = std::env::var("HF_TOKEN").context("HF_TOKEN没设置")?;
     let client = HFClient::builder()
@@ -39,7 +39,7 @@ async fn client_get() -> Result<HFClient> {
         .context("setup client with hf token")?;
     Ok(client)
 }
-async fn check_status(client: &HFClient) -> Result<()> {
+pub async fn check_status(client: &HFClient) -> Result<()> {
     println!("\n===whoami===");
     let user = client
         .whoami()
@@ -60,7 +60,7 @@ async fn check_status(client: &HFClient) -> Result<()> {
     Ok(())
 }
 
-async fn download_safetensor(client: HFClient, m1: Model) -> Result<()> {
+pub async fn download_safetensor(client: HFClient, m1: Model) -> Result<()> {
     let model = client.model(&m1.model_owner, &m1.model_name);
     let download_dir = PathBuf::from("hf-downloads/").join(m1.model_name);
     let path = model
@@ -74,7 +74,7 @@ async fn download_safetensor(client: HFClient, m1: Model) -> Result<()> {
     Ok(())
 }
 
-fn inspect_safetensors(path: impl AsRef<Path>) -> Result<()> {
+pub fn inspect_safetensors(path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     let data =
         fs::read(path).with_context(|| format!("读取safetensors文件失败:{}", path.display()))?;
