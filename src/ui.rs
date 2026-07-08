@@ -1,16 +1,41 @@
 use crate::model::{TensorKind, TensorsRecord};
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::Constraint,
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Row, Table, TableState},
 };
-struct AppState {
+pub struct AppState {
     pub records: Vec<TensorsRecord>,
-    pub table_state: ratatui::widgets::TableState,
+    pub table_state: TableState,
     pub total_params: usize,
-    pub total_memory: f64,
+    pub total_memory: usize,
+}
+
+impl AppState {
+    pub fn new() -> Self {
+        Self {
+            table_state: TableState::default(),
+            records: vec![],
+            total_params: 0,
+            total_memory: 0,
+        }
+    }
+    pub fn count(&mut self) {
+        let mut total_params = 0;
+        let mut total_memory = 0;
+        for r in &self.records {
+            total_params += r.numel;
+            total_memory += r.size_bytes;
+        }
+        self.total_memory = total_memory;
+        self.total_params = total_params;
+    }
+    pub fn add_record(&mut self, record: TensorsRecord) {
+        self.records.push(record);
+    }
 }
 fn format_bytes(bytes: usize) -> String {
     if bytes >= 1_048_576 {
@@ -21,7 +46,27 @@ fn format_bytes(bytes: usize) -> String {
         format!("{} B", bytes)
     }
 }
-pub fn draw(frame: &mut Frame, records: &[TensorsRecord]) {
+
+pub fn handle_key_event(app: &mut AppState, key: KeyEvent) {
+    let row_count = app.records.len();
+    if row_count == 0 {
+        return;
+    }
+    let selected = app.table_state.selected().unwrap_or(0);
+    let new_selected = match key.code {
+        KeyCode::Down | KeyCode::Char('j') => (selected + 1) % row_count,
+        KeyCode::Up | KeyCode::Char('k') => {
+            if selected == 0 {
+                row_count - 1
+            } else {
+                selected - 1
+            }
+        }
+        _ => return,
+    };
+    app.table_state.select(Some(new_selected));
+}
+pub fn draw(frame: &mut Frame, records: &[TensorsRecord], table_state: &mut TableState) {
     let rows = records.iter().map(|record| {
         let mut name_spans = Vec::new();
         let path_len = record.module_path.len();
@@ -72,5 +117,5 @@ pub fn draw(frame: &mut Frame, records: &[TensorsRecord]) {
         .header(header)
         .block(Block::default().title("Model Weight").borders(Borders::ALL))
         .row_highlight_style(Style::default().bg(Color::DarkGray));
-    frame.render_widget(table, frame.area());
+    frame.render_stateful_widget(table, frame.area(), table_state);
 }

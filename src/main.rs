@@ -1,15 +1,11 @@
 use crossterm::{
     ExecutableCommand,
-    event::{self, Event, KeyCode},
+    event::{self, Event, KeyCode, KeyEvent},
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use model_weight_parser::model::{TensorKind, TensorsRecord};
 use model_weight_parser::ui;
-use ratatui::{
-    Terminal,
-    backend::CrosstermBackend,
-    widgets::{Block, Borders, Paragraph},
-};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::{Result, stdout};
 fn main() -> Result<()> {
     enable_raw_mode()?;
@@ -46,26 +42,23 @@ fn main() -> Result<()> {
             String::from("embeddings"),
             String::from("LayerNorm"),
         ],
-        kind: TensorKind::Bias, // 或者归为 TensorKind::LayerNorm
+        kind: TensorKind::Bias,
     };
-    // 创建终端实例
+    let mut app = ui::AppState::new();
+    app.add_record(record1);
+    app.add_record(record2);
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-    let records = vec![record1, record2];
     loop {
-        // 1. 绘制 UI
         terminal.draw(|frame| {
-            // 创建一个段落组件 (Paragraph)，外加一个带有全边框的块 (Block)
-            ui::draw(frame, &records);
+            ui::draw(frame, &app.records, &mut app.table_state);
         })?;
 
-        // 2. 处理键盘输入
-        // 轮询事件，设置 50ms 超时，防止程序完全阻塞在等待输入上
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
-                // 如果按下的是 'q' 键，就跳出循环
                 if key.code == KeyCode::Char('q') {
                     break;
                 }
+                ui::handle_key_event(&mut app, key);
             }
         }
     }
