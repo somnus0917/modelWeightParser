@@ -125,17 +125,17 @@ mod tests {
     #[tokio::test]
     async fn test_download_safetensors() -> Result<()> {
         let m = Model {
-            model_name: String::from("albert-base-v2"),
-            model_owner: String::from("albert"),
+            model_name: String::from("all-MiniLM-L12-v2"),
+            model_owner: String::from("sentence-transformers"),
         };
         let client = client_get().await?;
         download_safetensor(client, m).await?;
         Ok(())
     }
-    // #[test]
-    // fn test_inspect() -> Result<()> {
-    //     let path = "hf-downloads/model.safetensors";
-    //     inspect_safetensors(path);
-    //     Ok(())
-    // }
+    #[test]
+    fn test_inspect() -> Result<()> {
+        let path = "hf-downloads/all-MiniLM-L12-v2/model.safetensors";
+        inspect_safetensors(path)?;
+        Ok(())
+    }
 }
