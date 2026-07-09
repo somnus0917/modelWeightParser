@@ -122,16 +122,18 @@ pub fn load_safetensors(path: impl AsRef<Path>) -> Result<Vec<TensorsRecord>> {
         let numel = shape.iter().product();
         let size_bytes = numel * dtype.bitsize() / 8;
         let module_path: Vec<String> = name.split('.').map(String::from).collect();
-        let kind = match module_path.last() {
-            Some(a) => match a.as_str() {
-                "weight" => TensorKind::Weight,
-                "bias" => TensorKind::Bias,
-                "embedding" => TensorKind::Embedding,
-                "attention" => TensorKind::Attention,
-                "layernorm" => TensorKind::LayerNorm,
+        let kind = if module_path.iter().any(|p| p == "LayerNorm") {
+            TensorKind::LayerNorm
+        } else if module_path.iter().any(|p| p.contains("attention")) {
+            TensorKind::Attention
+        } else if module_path.iter().any(|p| p.contains("embedding")) {
+            TensorKind::Embedding
+        } else {
+            match module_path.last().map(String::as_str) {
+                Some("weight") => TensorKind::Weight,
+                Some("bias") => TensorKind::Bias,
                 _ => TensorKind::Other,
-            },
-            None => TensorKind::Other,
+            }
         };
         records.push(TensorsRecord {
             name: name.to_string(),
