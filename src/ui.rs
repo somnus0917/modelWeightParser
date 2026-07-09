@@ -97,7 +97,7 @@ pub fn draw(frame: &mut Frame, records: &[TensorsRecord], table_state: &mut Tabl
             Cell::from(Line::from(name_spans)),
             Cell::from(Span::styled(kind_str, Style::default().fg(kind_color))),
             Cell::from(format!("{:?}", record.shape)),
-            Cell::from(format_bytes(record.numel)),
+            Cell::from(format!("{}", record.numel)),
             Cell::from(format_bytes(record.size_bytes)),
         ])
     });

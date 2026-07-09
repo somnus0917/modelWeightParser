@@ -1,10 +1,10 @@
 use std::{
+    fmt::Debug,
     fs,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Ok, Result};
-use dotenvy;
+use anyhow::{Context, Result};
 use hf_hub::HFClient;
 use safetensors::SafeTensors;
 #[derive(Clone)]
@@ -12,7 +12,7 @@ pub struct Model {
     model_name: String,
     model_owner: String,
 }
-
+#[derive(Debug)]
 pub struct TensorsRecord {
     pub name: String,
     pub dtype: String,
@@ -29,6 +29,19 @@ pub enum TensorKind {
     Attention,
     Embedding,
     Other,
+}
+
+impl Debug for TensorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TensorKind::Attention => write!(f, "Attention"),
+            TensorKind::Embedding => write!(f, "Embedding"),
+            TensorKind::LayerNorm => write!(f, "LayerNorm"),
+            TensorKind::Weight => write!(f, "Weight"),
+            TensorKind::Bias => write!(f, "Bias"),
+            TensorKind::Other => write!(f, "Other"),
+        }
+    }
 }
 pub async fn client_get() -> Result<HFClient> {
     dotenvy::dotenv().ok();
@@ -94,23 +107,44 @@ pub fn inspect_safetensors(path: impl AsRef<Path>) -> Result<()> {
     }
     Ok(())
 }
-// fn load_safetensors(path: impl AsRef<Path>) -> Result<TensorsRecord> {
-//     let path = path.as_ref();
-//     let data = fs::read(path).with_context(|| format!("模型文件{}打开错误", path.display()))?;
-//     let tensors = SafeTensors::deserialize(&data)
-//         .with_context(|| format!("解析safentensors文件失败:{}", path.display()))?;
-
-//     let mut records = Vec::new();
-//     for name in tensors.names() {
-//         let tensor = tensors
-//             .tensor(name)
-//             .with_context(|| format!("读取metadata失败:{}", name))?;
-//         let shape = tensor.shape().to_vec();
-//         let dtype = format!("{:?}", tensor.dtype());
-//         let numel = shape.iter().product::<usize>();
-//     }
-//     todo!()
-// }
+pub fn load_safetensors(path: impl AsRef<Path>) -> Result<Vec<TensorsRecord>> {
+    let path = path.as_ref();
+    let data = fs::read(path).with_context(|| format!("模型文件{}打开错误", path.display()))?;
+    let tensors = SafeTensors::deserialize(&data)
+        .with_context(|| format!("解析safentensors文件失败:{}", path.display()))?;
+    let mut records: Vec<TensorsRecord> = Vec::new();
+    for name in tensors.names() {
+        let tensor = tensors
+            .tensor(name)
+            .with_context(|| format!("读取metadata标签失败{}", name))?;
+        let shape = tensor.shape().to_vec();
+        let dtype = tensor.dtype();
+        let numel = shape.iter().product();
+        let size_bytes = numel * dtype.bitsize() / 8;
+        let module_path: Vec<String> = name.split('.').map(String::from).collect();
+        let kind = match module_path.last() {
+            Some(a) => match a.as_str() {
+                "weight" => TensorKind::Weight,
+                "bias" => TensorKind::Bias,
+                "embedding" => TensorKind::Embedding,
+                "attention" => TensorKind::Attention,
+                "layernorm" => TensorKind::LayerNorm,
+                _ => TensorKind::Other,
+            },
+            None => TensorKind::Other,
+        };
+        records.push(TensorsRecord {
+            name: name.to_string(),
+            dtype: format!("{:?}", dtype),
+            shape,
+            numel,
+            size_bytes,
+            module_path,
+            kind,
+        });
+    }
+    Ok(records)
+}
 
 #[cfg(test)]
 mod tests {
@@ -136,6 +170,13 @@ mod tests {
     fn test_inspect() -> Result<()> {
         let path = "hf-downloads/all-MiniLM-L12-v2/model.safetensors";
         inspect_safetensors(path)?;
+        Ok(())
+    }
+    #[test]
+    fn test_load_safetensors() -> Result<()> {
+        let path = "hf-downloads/all-MiniLM-L12-v2/model.safetensors";
+        let tensors = load_safetensors(path)?;
+        println!("{:?}", tensors);
         Ok(())
     }
 }
