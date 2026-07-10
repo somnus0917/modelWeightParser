@@ -1,4 +1,7 @@
-use crate::model::{TensorKind, TensorsRecord};
+use crate::{
+    model::{TensorKind, TensorsRecord},
+    tree::{TensorTree, TreeRowKind},
+};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
@@ -9,6 +12,7 @@ use ratatui::{
 };
 pub struct AppState {
     pub records: Vec<TensorsRecord>,
+    pub tree: TensorTree,
     pub table_state: TableState,
     pub total_params: usize,
     pub total_memory: usize,
@@ -19,6 +23,7 @@ impl AppState {
         Self {
             table_state: TableState::default(),
             records: vec![],
+            tree: TensorTree::default(),
             total_params: 0,
             total_memory: 0,
         }
@@ -33,8 +38,12 @@ impl AppState {
         self.total_memory = total_memory;
         self.total_params = total_params;
     }
-    pub fn add_record(&mut self, record: TensorsRecord) {
-        self.records.push(record);
+    pub fn set_records(&mut self, records: Vec<TensorsRecord>) {
+        self.records = records;
+        self.tree = TensorTree::from_records(&self.records);
+        self.count();
+        self.table_state
+            .select((!self.records.is_empty()).then_some(0));
     }
 }
 fn format_bytes(bytes: usize) -> String {
@@ -48,7 +57,7 @@ fn format_bytes(bytes: usize) -> String {
 }
 
 pub fn handle_key_event(app: &mut AppState, key: KeyEvent) {
-    let row_count = app.records.len();
+    let row_count = app.tree.visible_len();
     if row_count == 0 {
         return;
     }
@@ -62,44 +71,56 @@ pub fn handle_key_event(app: &mut AppState, key: KeyEvent) {
                 selected - 1
             }
         }
+        KeyCode::Enter | KeyCode::Char(' ') | KeyCode::Right => {
+            app.tree.toggle_visible_row(selected);
+            return;
+        }
         _ => return,
     };
     app.table_state.select(Some(new_selected));
 }
-pub fn draw(frame: &mut Frame, records: &[TensorsRecord], table_state: &mut TableState) {
-    let rows = records.iter().map(|record| {
-        let mut name_spans = Vec::new();
-        let path_len = record.module_path.len();
-        for (i, part) in record.module_path.iter().enumerate() {
-            if i == path_len - 1 {
-                name_spans.push(Span::styled(
-                    part,
+pub fn draw(frame: &mut Frame, app: &mut AppState) {
+    let rows = app.tree.visible_rows().into_iter().map(|tree_row| {
+        let indent = "  ".repeat(tree_row.depth);
+        match tree_row.kind {
+            TreeRowKind::Folder => Row::new(vec![
+                Cell::from(Line::from(vec![Span::styled(
+                    format!(
+                        "{indent}{} {}",
+                        if tree_row.expanded { "▼" } else { "▶" },
+                        tree_row.name
+                    ),
                     Style::default()
-                        .fg(ratatui::style::Color::White)
+                        .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
-                ));
-            } else {
-                name_spans.push(Span::styled(
-                    format!("{}", part),
-                    Style::default().fg(ratatui::style::Color::DarkGray),
-                ));
+                )])),
+                Cell::from("Folder"),
+                Cell::from("-"),
+                Cell::from(tree_row.numel.to_string()),
+                Cell::from(format_bytes(tree_row.size_bytes)),
+            ]),
+            TreeRowKind::Tensor(record_index) => {
+                let record = &app.records[record_index];
+                let (kind_str, kind_color) = match record.kind {
+                    TensorKind::Weight => ("Weight", Color::Cyan),
+                    TensorKind::Bias => ("Bias", Color::Magenta),
+                    TensorKind::LayerNorm => ("LayerNorm", Color::Yellow),
+                    TensorKind::Attention => ("Attention", Color::Green),
+                    TensorKind::Embedding => ("Embedding", Color::Blue),
+                    TensorKind::Other => ("Other", Color::Gray),
+                };
+                Row::new(vec![
+                    Cell::from(Line::from(vec![Span::styled(
+                        format!("{indent}  {}", tree_row.name),
+                        Style::default().fg(Color::White),
+                    )])),
+                    Cell::from(Span::styled(kind_str, Style::default().fg(kind_color))),
+                    Cell::from(format!("{:?}", record.shape)),
+                    Cell::from(record.numel.to_string()),
+                    Cell::from(format_bytes(record.size_bytes)),
+                ])
             }
         }
-        let (kind_str, kind_color) = match record.kind {
-            TensorKind::Weight => ("Weight", Color::Cyan),
-            TensorKind::Bias => ("Bias", Color::Magenta),
-            TensorKind::LayerNorm => ("LayerNorm", Color::Yellow),
-            TensorKind::Attention => ("Attention", Color::Green),
-            TensorKind::Embedding => ("Embedding", Color::Blue),
-            TensorKind::Other => ("Other", Color::Gray),
-        };
-        Row::new(vec![
-            Cell::from(Line::from(name_spans)),
-            Cell::from(Span::styled(kind_str, Style::default().fg(kind_color))),
-            Cell::from(format!("{:?}", record.shape)),
-            Cell::from(format!("{}", record.numel)),
-            Cell::from(format_bytes(record.size_bytes)),
-        ])
     });
     let widths = vec![
         Constraint::Percentage(40),
@@ -115,7 +136,11 @@ pub fn draw(frame: &mut Frame, records: &[TensorsRecord], table_state: &mut Tabl
     );
     let table = Table::new(rows, widths)
         .header(header)
-        .block(Block::default().title("Model Weight").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("Model Weight  (j/k: move, Enter/Space/→: toggle, q: quit)")
+                .borders(Borders::ALL),
+        )
         .row_highlight_style(Style::default().bg(Color::DarkGray));
-    frame.render_stateful_widget(table, frame.area(), table_state);
+    frame.render_stateful_widget(table, frame.area(), &mut app.table_state);
 }

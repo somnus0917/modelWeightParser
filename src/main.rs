@@ -28,11 +28,11 @@ fn main() -> Result<()> {
     let mut app = ui::AppState::new();
     let path = "hf-downloads/all-MiniLM-L12-v2/model.safetensors";
     let records = model::load_safetensors(path)?;
-    app.records = records;
+    app.set_records(records);
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     loop {
         terminal.draw(|frame| {
-            ui::draw(frame, &app.records, &mut app.table_state);
+            ui::draw(frame, &mut app);
         })?;
         if event::poll(std::time::Duration::from_millis(50))? {
             if let Event::Key(key) = event::read()? {
